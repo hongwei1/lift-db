@@ -1230,30 +1230,3 @@ trait ProtoDBVendor extends ConnectionManager {
   }
 }
 
-import com.zaxxer.hikari.{HikariConfig, HikariDataSource}
-
-object Datasource {
-  val config = new HikariConfig()
-  //  jdbc:postgresql://localhost:5432/obp-mapped?user=postgres&password=f
-  config.setJdbcUrl("jdbc:postgresql://localhost:5432/obp-mapped")
-  config.setUsername("postgres")
-  config.setPassword("f")
-  config.addDataSourceProperty("cachePrepStmts", "true")
-  config.addDataSourceProperty("prepStmtCacheSize", "250")
-  config.addDataSourceProperty("prepStmtCacheSqlLimit", "2048")
-
-  val ds: HikariDataSource = new HikariDataSource(config)
-}
-
-object myApp2 extends App{
-  val connection: Connection = Datasource.ds.getConnection
-
-  val stmt = connection.createStatement()
-  stmt.executeUpdate("CREATE TABLE IF NOT EXISTS ticks (tick timestamp)")
-  stmt.executeUpdate("INSERT INTO ticks VALUES (now())")
-  val rs = stmt.executeQuery("SELECT tick FROM ticks")
-
-  while (rs.next()) {
-    println("Read from DB: " + rs.getTimestamp("tick") + "\n")
-  }
-}
