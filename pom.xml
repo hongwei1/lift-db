@@ -204,25 +204,25 @@
         <dependency>
             <groupId>org.specs2</groupId>
             <artifactId>specs2-core_2.12</artifactId>
-            <version>4.9.4</version>
+            <version>4.20.2</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.specs2</groupId>
             <artifactId>specs2-matcher-extra_2.12</artifactId>
-            <version>4.9.4</version>
+            <version>4.20.2</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.specs2</groupId>
             <artifactId>specs2-mock_2.12</artifactId>
-            <version>4.9.4</version>
+            <version>4.20.2</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.specs2</groupId>
             <artifactId>specs2-scalacheck_2.12</artifactId>
-            <version>4.9.4</version>
+            <version>4.20.2</version>
             <scope>test</scope>
         </dependency>
         <dependency>
