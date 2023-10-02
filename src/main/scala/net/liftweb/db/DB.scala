@@ -20,12 +20,13 @@ package db
 import common._
 import util._
 import Helpers._
-
+import com.zaxxer.hikari.pool.ProxyConnection
+import com.zaxxer.hikari.{HikariConfig, HikariDataSource}
 import net.liftweb.http.S
 
-import javax.sql.{DataSource}
+import javax.sql.DataSource
 import java.sql.{ResultSetMetaData, SQLException}
-import java.sql.{Statement, ResultSet, Types, PreparedStatement, Connection, DriverManager}
+import java.sql.{Connection, PreparedStatement, ResultSet, Statement, Types}
 import scala.collection.mutable.{HashMap, ListBuffer}
 import javax.naming.{Context, InitialContext}
 
@@ -275,12 +276,12 @@ trait DB extends Loggable {
       }
     }
 
-  private def releaseConnection(conn: SuperConnection): Unit = conn.close
+  private def releaseConnection(conn: SuperConnection): Unit =  conn.asInstanceOf[ProxyConnection].close()
 
   private def calcBaseCount(conn: ConnectionIdentifier): Int =
   CurrentConnectionSet.is.map(_.use(conn)) openOr 0
 
-  private def getConnection(name: ConnectionIdentifier): SuperConnection = {
+  def getConnection(name: ConnectionIdentifier): SuperConnection = {
     logger.trace("Acquiring " + name + " On thread " + Thread.currentThread)
     var ret = info.get(name) match {
       case None => ConnectionHolder(newConnection(name), calcBaseCount(name) + 1, Nil, false)
@@ -1112,42 +1113,15 @@ class StandardDBVendor(driverName: String,
 
     (dbUser, dbPassword) match {
       case (Full(user), Full(pwd)) =>
-        tryo{t:Throwable => logger.error("Unable to get database connection. url=%s, user=%s".format(dbUrl, user),t)}(Datasource.ds.getConnection)
+        tryo{t:Throwable => logger.error("Unable to get database connection. url=%s, user=%s".format(dbUrl, user),t)}(HikariDatasource.ds.getConnection)
       case _ =>
-        tryo{t:Throwable => logger.error("Unable to get database connection. url=%s".format(dbUrl),t)}(Datasource.ds.getConnection)
+        tryo{t:Throwable => logger.error("Unable to get database connection. url=%s".format(dbUrl),t)}(HikariDatasource.ds.getConnection)
     }
   }
 }
 
 trait ProtoDBVendor extends ConnectionManager {
   private val logger = Logger(classOf[ProtoDBVendor])
-  private var pool: List[Connection] = Nil
-  private var poolSize = 0
-  private var tempMaxSize = maxPoolSize
-
-  /**
-   * Override and set to false if the maximum pool size can temporarilly be expanded to avoid pool starvation
-   */
-  protected def allowTemporaryPoolExpansion = true
-
-  /**
-   *  Override this method if you want something other than
-   * 4 connections in the pool
-   */
-  protected def maxPoolSize = 4
-
-  /**
-   * The absolute maximum that this pool can extend to
-   * The default is 20.  Override this method to change.
-   */
-  protected def doNotExpandBeyond = 20
-
-  /**
-   * The logic for whether we can expand the pool beyond the current size.  By
-   * default, the logic tests allowTemporaryPoolExpansion &amp;&amp; poolSize &lt;= doNotExpandBeyond
-   */
-  protected def canExpand_? : Boolean = allowTemporaryPoolExpansion && poolSize <= doNotExpandBeyond
-
   /**
    *   How is a connection created?
    */
@@ -1161,72 +1135,24 @@ trait ProtoDBVendor extends ConnectionManager {
     conn.setAutoCommit(false)
   }
 
-  def newConnection(name: ConnectionIdentifier): Box[Connection] =
-    synchronized {
-      pool match {
-        case Nil if poolSize < tempMaxSize =>
-          val ret = createOne
-          ret.foreach(_.setAutoCommit(false))
-          poolSize = poolSize + 1
-          logger.debug("Created new pool entry. name=%s, poolSize=%d".format(name, poolSize))
-          ret
+  def newConnection(name: ConnectionIdentifier): Box[Connection] = tryo{HikariDatasource.ds.getConnection}
 
-        case Nil =>
-          val curSize = poolSize
-          logger.trace("No connection left in pool, waiting...")
-          wait(50L)
-          // if we've waited 50 ms and the pool is still empty, temporarily expand it
-          if (pool.isEmpty && poolSize == curSize && canExpand_?) {
-            tempMaxSize += 1
-            logger.debug("Temporarily expanding pool. name=%s, tempMaxSize=%d".format(name, tempMaxSize))
-          }
-          newConnection(name)
+  def releaseConnection(conn: Connection): Unit = {conn.asInstanceOf[ProxyConnection].close()}
 
-        case x :: xs =>
-          logger.trace("Found connection in pool, name=%s".format(name))
-          pool = xs
-          try {
-            this.testConnection(x)
-            Full(x)
-          } catch {
-            case e: Exception => try {
-              logger.debug("Test connection failed, removing connection from pool, name=%s".format(name))
-              poolSize = poolSize - 1
-              tryo(x.close)
-              newConnection(name)
-            } catch {
-              case e: Exception => newConnection(name)
-            }
-          }
-      }
-    }
-
-  def releaseConnection(conn: Connection): Unit = synchronized {
-    if (tempMaxSize > maxPoolSize) {
-      tryo {conn.close()}
-      tempMaxSize -= 1
-      poolSize -= 1
-    } else {
-      pool = conn :: pool
-    }
-    logger.debug("Released connection. poolSize=%d".format(poolSize))
-    notifyAll
-  }
-
-  def closeAllConnections_!(): Unit = _closeAllConnections_!(0)
-
-
-  private def _closeAllConnections_!(cnt: Int): Unit = synchronized {
-    logger.info("Closing all connections")
-    if (poolSize <= 0 || cnt > 10) ()
-    else {
-      pool.foreach {c => tryo(c.close); poolSize -= 1}
-      pool = Nil
-
-      if (poolSize > 0) wait(250)
-
-      _closeAllConnections_!(cnt + 1)
-    }
-  }
+  def closeAllConnections_!(): Unit = HikariDatasource.ds.close()
+  
 }
 
+
+object HikariDatasource {
+  val config = new HikariConfig()
+  //  jdbc:postgresql://localhost:5432/obp-mapped?user=postgres&password=f
+  config.setJdbcUrl("jdbc:postgresql://localhost:5432/obp-mapped")
+  config.setUsername("postgres")
+  config.setPassword("f")
+  config.addDataSourceProperty("cachePrepStmts", "true")
+  config.addDataSourceProperty("prepStmtCacheSize", "250")
+  config.addDataSourceProperty("prepStmtCacheSqlLimit", "2048")
+
+  val ds: HikariDataSource = new HikariDataSource(config)
+}
