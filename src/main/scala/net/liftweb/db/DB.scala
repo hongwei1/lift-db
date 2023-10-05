@@ -1147,9 +1147,14 @@ trait ProtoDBVendor extends ConnectionManager {
 object HikariDatasource {
   val config = new HikariConfig()
   //  jdbc:postgresql://localhost:5432/obp-mapped?user=postgres&password=f
-  config.setJdbcUrl("jdbc:postgresql://localhost:5432/obp-mapped")
+//  config.setJdbcUrl("jdbc:postgresql://localhost:5432/obp-mapped-1")
+//  config.setUsername("postgres")
+//  config.setPassword("f")
+  config.setJdbcUrl("jdbc:h2:mem:OBPTest_H2_v2.1.214;NON_KEYWORDS=VALUE;DB_CLOSE_DELAY=10")
+//  config.setJdbcUrl("jdbc:postgresql://localhost:5432/test20231004")
   config.setUsername("postgres")
   config.setPassword("f")
+//  config.setAutoCommit(true)
   config.addDataSourceProperty("cachePrepStmts", "true")
   config.addDataSourceProperty("prepStmtCacheSize", "250")
   config.addDataSourceProperty("prepStmtCacheSqlLimit", "2048")
